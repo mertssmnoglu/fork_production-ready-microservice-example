@@ -23,15 +23,24 @@ This service provides REST API endpoints for managing products, utilizing Couchb
 - **Metrics**: Prometheus
 - **Monitoring**: Grafana
 
-## Project Structure 
+## Project Structure
 
+```lua
 ├── app
+│ └── healthcheck
+│── └── health.go
 │ └── product
-│ ├── create_product_handler.go
-│ ├── get_product_handler.go
-│ └── repository.go
+│── └── create_product_handler.go
+│── └── get_product_handler.go
+│── └── repository.go
+├── config
+│ └── config.yaml -- App Configuration File
+├── domain
+│ └── product.go
 ├── infra
 │ └── couchbase
+│── └── repository.go
+│ └── postgres
 │── └── repository.go
 ├── pkg
 │ └── config
@@ -40,26 +49,28 @@ This service provides REST API endpoints for managing products, utilizing Couchb
 │── └── log.go
 ├── Dockerfile
 ├── docker-compose.yml
-└── main.go
+├── main.go
 ```
 
 ## Getting Started
 
 1. Clone the repository:
 
-```bash
-git clone <repository-url>
-```
+    ```bash
+    git clone https://github.com/mstrYoda/production-ready-microservice-example.git
+    ```
 
 2. Start the required services using Docker Compose:
-```bash
-docker-compose up -d
-```
+
+    ```bash
+    docker-compose up -d
+    ```
 
 3. Run the application:
-```bash
-go run main.go
-```
+
+    ```bash
+    go run main.go
+    ```
 
 ## API Endpoints
 
