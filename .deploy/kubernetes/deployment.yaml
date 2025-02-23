@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: microservice-test
+  name: microservice-test
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: microservice-test
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: microservice-test
+    spec:
+      containers:
+      - image: microservice-test-4
+        name: microservice-test
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            cpu: "80m"  # Set a reasonable CPU request
+          limits:
+            cpu: "500m"  # (Optional) Set a CPU limit
