@@ -121,8 +121,9 @@ func main() {
 	appConfig := config.Read()
 	defer zap.L().Sync()
 	zap.L().Info("app starting...")
+	zap.L().Info("app config", zap.Any("appConfig", appConfig))
 
-	tp := initTracer()
+	tp := initTracer(appConfig)
 	client := httpc()
 
 	retryClient := retryablehttp.NewClient()
@@ -138,9 +139,9 @@ func main() {
 		return retryablehttp.DefaultRetryPolicy(ctx, resp, err)
 	}
 
-	couchbaseRepository := couchbase.NewCouchbaseRepository(tp)
+	couchbaseRepository := couchbase.NewCouchbaseRepository(tp, appConfig.CouchbaseUrl, appConfig.CouchbaseUsername, appConfig.CouchbasePassword)
 
-	getProductHandler := product.NewGetProductHandler(couchbaseRepository, retryClient)
+	getProductHandler := product.NewGetProductHandler(couchbaseRepository, retryClient, appConfig.HttpServer)
 	createProductHandler := product.NewCreateProductHandler(couchbaseRepository)
 	healthcheckHandler := healthcheck.NewHealthCheckHandler()
 
@@ -162,7 +163,7 @@ func main() {
 
 	// Start server in a goroutine
 	go func() {
-		if err := app.Listen(fmt.Sprintf(":%s", appConfig.Port)); err != nil {
+		if err := app.Listen(fmt.Sprintf("0.0.0.0:%s", appConfig.Port)); err != nil {
 			zap.L().Error("Failed to start server", zap.Error(err))
 			os.Exit(1)
 		}
@@ -208,7 +209,7 @@ func httpc() *http.Client {
 	return httpClient
 }
 
-func initTracer() *sdktrace.TracerProvider {
+func initTracer(appConfig *config.AppConfig) *sdktrace.TracerProvider {
 	headers := map[string]string{
 		"content-type": "application/json",
 	}
@@ -216,7 +217,7 @@ func initTracer() *sdktrace.TracerProvider {
 	exporter, err := otlptrace.New(
 		context.Background(),
 		otlptracehttp.NewClient(
-			otlptracehttp.WithEndpoint("localhost:4318"),
+			otlptracehttp.WithEndpoint(appConfig.OtelTraceEndpoint),
 			otlptracehttp.WithHeaders(headers),
 			otlptracehttp.WithInsecure(),
 		),

@@ -20,17 +20,17 @@ type CouchbaseRepository struct {
 	tracer  *gocbopentelemetry.OpenTelemetryRequestTracer
 }
 
-func NewCouchbaseRepository(tp *sdktrace.TracerProvider) *CouchbaseRepository {
+func NewCouchbaseRepository(tp *sdktrace.TracerProvider, couchbaseUrl string, username string, password string) *CouchbaseRepository {
 	tracer := gocbopentelemetry.NewOpenTelemetryRequestTracer(tp)
-	cluster, err := gocb.Connect("couchbase://localhost", gocb.ClusterOptions{
+	cluster, err := gocb.Connect(couchbaseUrl, gocb.ClusterOptions{
 		TimeoutsConfig: gocb.TimeoutsConfig{
 			ConnectTimeout: 3 * time.Second,
 			KVTimeout:      3 * time.Second,
 			QueryTimeout:   3 * time.Second,
 		},
 		Authenticator: gocb.PasswordAuthenticator{
-			Username: "Administrator",
-			Password: "123456789",
+			Username: username,
+			Password: password,
 		},
 		Transcoder: gocb.NewJSONTranscoder(),
 		Tracer:     tracer,

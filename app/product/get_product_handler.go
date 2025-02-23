@@ -24,9 +24,10 @@ type GetProductHandler struct {
 	repository Repository
 	httpClient *retryablehttp.Client
 	breaker    *gobreaker.CircuitBreaker
+	httpServer string
 }
 
-func NewGetProductHandler(repository Repository, httpClient *retryablehttp.Client) *GetProductHandler {
+func NewGetProductHandler(repository Repository, httpClient *retryablehttp.Client, httpServer string) *GetProductHandler {
 	// Configure the circuit breaker
 	breakerSettings := gobreaker.Settings{
 		Name:        "http-client",
@@ -50,11 +51,12 @@ func NewGetProductHandler(repository Repository, httpClient *retryablehttp.Clien
 		repository: repository,
 		httpClient: httpClient,
 		breaker:    gobreaker.NewCircuitBreaker(breakerSettings),
+		httpServer: httpServer,
 	}
 }
 
 func (h *GetProductHandler) Handle(ctx context.Context, req *GetProductRequest) (*GetProductResponse, error) {
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:8081/random-error", nil)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, h.httpServer+"/random-error", nil)
 	if err != nil {
 		return nil, err
 	}
