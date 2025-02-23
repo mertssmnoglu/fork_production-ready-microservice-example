@@ -9,9 +9,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
+	"github.com/hashicorp/go-retryablehttp"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -33,6 +36,40 @@ import (
 	"microservicetest/pkg/config"
 	_ "microservicetest/pkg/log"
 )
+
+// Prometheus metrics
+var httpRequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+	Name:    "http_request_duration_seconds",
+	Help:    "Duration of HTTP requests in seconds",
+	Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
+}, []string{"route", "method", "status"})
+
+func init() {
+	prometheus.MustRegister(httpRequestDuration)
+}
+
+// RequestDurationMiddleware measures the duration of HTTP requests
+func RequestDurationMiddleware() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		start := time.Now()
+
+		// Call next handler
+		err := c.Next()
+
+		// Record duration after the handler returns
+		duration := time.Since(start).Seconds()
+		status := strconv.Itoa(c.Response().StatusCode())
+
+		// Record metrics
+		httpRequestDuration.WithLabelValues(
+			c.Route().Path,
+			c.Method(),
+			status,
+		).Observe(duration)
+
+		return err
+	}
+}
 
 type Request any
 type Response any
@@ -63,8 +100,12 @@ func handle[R Request, Res Response](handler HandlerInterface[R, Res]) fiber.Han
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 		}
 
-		ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
-		defer cancel()
+		/*
+			ctx, cancel := context.WithTimeout(c.UserContext(), 3*time.Second)
+			defer cancel()
+		*/
+
+		ctx := c.UserContext()
 
 		res, err := handler.Handle(ctx, &req)
 		if err != nil {
@@ -79,26 +120,39 @@ func handle[R Request, Res Response](handler HandlerInterface[R, Res]) fiber.Han
 func main() {
 	appConfig := config.Read()
 	defer zap.L().Sync()
-
 	zap.L().Info("app starting...")
 
 	tp := initTracer()
-	httpClient := httpc()
+	client := httpc()
+
+	retryClient := retryablehttp.NewClient()
+	retryClient.HTTPClient.Transport = client.Transport
+	retryClient.RetryMax = 0
+	retryClient.RetryWaitMin = 100 * time.Millisecond
+	retryClient.RetryWaitMax = 10 * time.Second
+	retryClient.Backoff = retryablehttp.LinearJitterBackoff
+	retryClient.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		return retryablehttp.DefaultRetryPolicy(ctx, resp, err)
+	}
 
 	couchbaseRepository := couchbase.NewCouchbaseRepository(tp)
 
-	getProductHandler := product.NewGetProductHandler(couchbaseRepository, httpClient)
+	getProductHandler := product.NewGetProductHandler(couchbaseRepository, retryClient)
 	createProductHandler := product.NewCreateProductHandler(couchbaseRepository)
 	healthcheckHandler := healthcheck.NewHealthCheckHandler()
 
 	app := fiber.New(fiber.Config{
 		IdleTimeout:  5 * time.Second,
-		ReadTimeout:  3 * time.Second,
-		WriteTimeout: 3 * time.Second,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
 		Concurrency:  256 * 1024,
 	})
 
 	app.Use(otelfiber.Middleware())
+	app.Use(RequestDurationMiddleware())
 
 	app.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
 	app.Get("/healthcheck", handle[healthcheck.HealthCheckRequest, healthcheck.HealthCheckResponse](healthcheckHandler))
