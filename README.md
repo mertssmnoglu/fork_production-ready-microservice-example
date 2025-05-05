@@ -115,4 +115,4 @@ This service implements OpenTelemetry for distributed tracing, allowing you to m
 
 ## License
 
-[Add your license information here]
+This project is licensed under the Apache 2.0 License. For further details, please see the [LICENSE](LICENSE) file.
